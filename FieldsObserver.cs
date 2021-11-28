@@ -3,7 +3,7 @@ using System.Linq;
 using System.Collections.Generic;
 using System;
 
-//this interface 
+//this interface needs to be implemented on classes that will be inside enumerables (only when marked)
 public interface IUpdateable
 {
     public void Update(object obj);
@@ -29,25 +29,24 @@ public class InvokeOnChange : UpdaterAtribute
 {
     public InvokeOnChange(params string[] groupNames) : base(groupNames) { }
 }
-
-public class ObserverGroup
-{
-    public string GroupName { get; set; } = "default";
-    public List<FieldInfo> Fields { get; set; } = new List<FieldInfo>();
-
-    public List<Action> MethodsToInove { get; set; } = new List<Action>();
-
-    public bool Changed { get; set; } = false;
-
-    public bool ContainsField(FieldInfo field) => Fields.Contains(field);
-    public override string ToString()
-    {
-        return GroupName;
-    }
-}
-
 public class FieldsObserver<T>
 {
+    private class ObserverGroup
+    {
+        public string GroupName { get; set; } = "default";
+        public List<FieldInfo> Fields { get; set; } = new List<FieldInfo>();
+
+        public List<Action> MethodsToInove { get; set; } = new List<Action>();
+
+        public bool Changed { get; set; } = false;
+
+        public bool ContainsField(FieldInfo field) => Fields.Contains(field);
+        public override string ToString()
+        {
+            return GroupName;
+        }
+    }
+
     private class HistoryObject
     {
         public object actualValue { get; set; }
