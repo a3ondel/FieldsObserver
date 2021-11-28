@@ -2,16 +2,16 @@ using System.Reflection;
 using System.Linq;
 using System.Collections.Generic;
 using System;
-
-//this interface needs to be implemented on classes that will be inside enumerables (only when marked)
+using UnityEngine;
+using Force.DeepCloner;
 public interface IUpdateable
 {
     public void Update(object obj);
 }
-public abstract class UpdaterAtribute : System.Attribute
+public abstract class ObserverAttribute : System.Attribute
 {
     public string[] GroupNames { get; set; }
-    public UpdaterAtribute(string[] groupNames)
+    public ObserverAttribute(string[] groupNames)
     {
         if (groupNames == null || groupNames?.Length == 0)
         {
@@ -21,14 +21,17 @@ public abstract class UpdaterAtribute : System.Attribute
         GroupNames = groupNames;
     }
 }
-public class ObserveField : UpdaterAtribute
+public class ObserveField : ObserverAttribute
 {
     public ObserveField(params string[] groupNames) : base(groupNames) { }
 }
-public class InvokeOnChange : UpdaterAtribute
+public class InvokeOnChange : ObserverAttribute
 {
     public InvokeOnChange(params string[] groupNames) : base(groupNames) { }
 }
+
+
+
 public class FieldsObserver<T>
 {
     private class ObserverGroup
@@ -44,45 +47,37 @@ public class FieldsObserver<T>
 
     private class HistoryObject
     {
-        public object actualValue { get; set; }
-        public object lastValue { get; set; }
+        public object LastValue { get; set; }
 
         public void Update(object actualValue)
         {
-            lastValue = this.actualValue; //TODO it should be a copy
-            this.actualValue = actualValue;
+            LastValue = actualValue; // TODO shallow or deep copy
         }
-
         public HistoryObject(object value)
         {
-            var enumerable = value as IUpdateable[];
+            IUpdateable[] enumerable = value as IUpdateable[];
 
             if (enumerable != null)
             {
-                actualValue = Helper.Cast(value, value.GetType());
                 var tmp1 = new List<IUpdateable>(enumerable.Length);
-                var tmp2 = new List<IUpdateable>(enumerable.Length);
 
                 for (int i = 0; i < enumerable.Length; i++)
                 {
                     tmp1.Add(new BaseClass());
-                    tmp2.Add(new BaseClass());
                 }
 
-                actualValue = tmp1.ToArray();
-                lastValue = tmp2.ToArray();
+                LastValue = tmp1.ToArray();
 
                 for (int i = 0; i < enumerable.Length; i++)
                 {
                     var instance = Activator.CreateInstance(enumerable[0].GetType()) as IUpdateable;
                     instance.Update(enumerable[i]);
-                    (lastValue as IUpdateable[])[i] = instance;
+                    (LastValue as IUpdateable[])[i] = instance;
                 }
             }
             else
             {
-                actualValue = value;
-                lastValue = value;
+                LastValue = value;
             }
         }
     }
@@ -96,7 +91,7 @@ public class FieldsObserver<T>
         _classToUpdate = classToUpdate;
         _groups.Add("default", new ObserverGroup());
 
-        _allfieldsToUpdate = typeof(T).GetFields()
+        _allfieldsToUpdate = typeof(T).GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
                                       .Where(field => field.GetCustomAttributes(typeof(ObserveField), false).Length > 0)
                                       .ToList();
 
@@ -126,7 +121,6 @@ public class FieldsObserver<T>
                     {
                         _groups[groupName] = new ObserverGroup();
                     }
-
                     _groups[groupName].MethodsToInove.Add(Delegate.CreateDelegate(typeof(Action), classToUpdate, method) as Action);
                 }
             }
@@ -146,35 +140,38 @@ public class FieldsObserver<T>
             _fieldsValueHistory.TryGetValue(field.Name, out var historyValue);
             var actualFieldValue = field.GetValue(_classToUpdate);//always return new referance
 
-            var type = historyValue.lastValue.GetType();
-            var castedLastValue = Helper.Cast(historyValue.lastValue, type);
-            bool changed = false;
-
+            var type = historyValue.LastValue.GetType();
+            var castedLastValue = Helper.Cast(historyValue.LastValue, type);
             if (Helper.IsIEnumerableOfT(type))
             {
+                bool changed = false;
                 for (int i = 0; i < castedLastValue.Length; i++)
                 {
-                    if (!castedLastValue[i].Equals((historyValue.actualValue as object[])[i]))
+                    if (!castedLastValue[i].Equals((actualFieldValue as object[])[i]))
                     {
                         changed = true;
                         break;
                     }
                 }
+
+                if (changed)
+                {
+                    for (int i = 0; i < castedLastValue.Length; i++)
+                    {
+                        castedLastValue[i].Update((actualFieldValue as object[])[i]);
+                    }
+
+                    CheckIfGroupHasField(field);
+                }
             }
             else if (!castedLastValue.Equals(actualFieldValue))
             {
-                changed = true;
-            }
+                historyValue.Update(actualFieldValue);
+                CheckIfGroupHasField(field);
 
-            if (changed)
+            }else if (type.Equals(typeof(AnimationCurve)))
             {
-                _fieldsValueHistory[field.Name].Update(actualFieldValue);
-
-                //looking for groups that have this field inside
-                foreach (var group in _groups)
-                {
-                    group.Value.Changed = group.Value.ContainsField(field);
-                }
+                historyValue.Update(new AnimationCurve { keys = (actualFieldValue as AnimationCurve).keys });
             }
         }
 
@@ -186,6 +183,14 @@ public class FieldsObserver<T>
             }
 
             group.Value.Changed = false;
+        }
+    }
+
+    private void CheckIfGroupHasField(FieldInfo field)
+    {
+        foreach (var group in _groups)
+        {
+            group.Value.Changed = group.Value.ContainsField(field);
         }
     }
 }
@@ -202,4 +207,6 @@ public static class Helper
         return type.GetInterfaces().Any(x => x.IsGenericType
                && x.GetGenericTypeDefinition() == typeof(IEnumerable<>));
     }
+
 }
+
