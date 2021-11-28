@@ -2,11 +2,8 @@ using System.Reflection;
 using System.Linq;
 using System.Collections.Generic;
 using System;
-using System.IO;
-using System.Runtime.Serialization.Formatters.Binary;
-using System.Runtime.Serialization;
 
-
+//this interface 
 public interface IUpdateable
 {
     public void Update(object obj);
@@ -95,7 +92,6 @@ public class FieldsObserver<T>
             }
             var res = actualValue == lastValue;
         }
-
     }
 
     private readonly Dictionary<string, UpdaterGroup> _groups = new Dictionary<string, UpdaterGroup>() { };
@@ -137,6 +133,7 @@ public class FieldsObserver<T>
                     {
                         _groups[groupName] = new UpdaterGroup() { GroupName = groupName };
                     }
+
                     _groups[groupName].MethodsToInove.Add(Delegate.CreateDelegate(typeof(Action), classToUpdate, method) as Action);
                 }
             }
@@ -158,9 +155,10 @@ public class FieldsObserver<T>
 
             var type = historyValue.lastValue.GetType();
             var castedLastValue = Helper.Cast(historyValue.lastValue, type);
+            bool changed = false;
+
             if (Helper.IsIEnumerableOfT(type))
             {
-                bool changed = false;
                 for (int i = 0; i < castedLastValue.Length; i++)
                 {
                     if (!castedLastValue[i].Equals((historyValue.actualValue as object[])[i]))
@@ -169,23 +167,15 @@ public class FieldsObserver<T>
                         break;
                     }
                 }
-
-                if (changed)
-                {
-                    for (int i = 0; i < castedLastValue.Length; i++)
-                    {
-                        castedLastValue[i].Update((actualFieldValue as object[])[i]);
-                         
-                        historyValue.actualValue = actualFieldValue;
-                    }
-
-                    CheckIfGroupHasField(field);
-                }
             }
             else if (!castedLastValue.Equals(actualFieldValue))
             {
-                _fieldsValueHistory[field.Name].Update(actualFieldValue);
+                changed = true;
+            }
 
+            if (changed)
+            {
+                _fieldsValueHistory[field.Name].Update(actualFieldValue);
                 CheckIfGroupHasField(field);
             }
         }
@@ -223,5 +213,3 @@ public static class Helper
                && x.GetGenericTypeDefinition() == typeof(IEnumerable<>));
     }
 }
-
-
