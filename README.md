@@ -1,9 +1,9 @@
 # FieldsObserver
  Simple Observer class, generally for Unity Scripts, but can be used anywhere.
  
- Allows to mark fields and void methods with no args with included Atributes: 
- -ObserveField(param string[] groupName)
- -InvokeOnChange(param string[] groupName)
+ Allows to mark fields and void methods with no args with included Atributes:\
+ -ObserveField(param string[] groupName)\
+ -InvokeOnChange(param string[] groupName)\
  
  
 If field is mareked with ObserveField atribute with no parameters field will be added to default group, same thing will happen with method.
