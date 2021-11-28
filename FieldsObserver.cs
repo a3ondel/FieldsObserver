@@ -40,10 +40,6 @@ public class FieldsObserver<T>
         public bool Changed { get; set; } = false;
 
         public bool ContainsField(FieldInfo field) => Fields.Contains(field);
-        public override string ToString()
-        {
-            return GroupName;
-        }
     }
 
     private class HistoryObject
