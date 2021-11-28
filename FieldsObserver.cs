@@ -3,7 +3,7 @@ using System.Linq;
 using System.Collections.Generic;
 using System;
 
-public interface IUpdateable
+public interface IUpdatable
 {
     public void Update(object obj);
 }
@@ -55,11 +55,11 @@ public class FieldsObserver<T>
 
         public HistoryObject(object value)
         {
-            IUpdateable[] enumerable = value as IUpdateable[];
+            IUpdatable[] enumerable = value as IUpdatable[];
 
             if (enumerable != null)
             {
-                var tmp1 = new List<IUpdateable>(enumerable.Length);
+                var tmp1 = new List<IUpdatable>(enumerable.Length);
 
                 for (int i = 0; i < enumerable.Length; i++)
                 {
@@ -70,9 +70,9 @@ public class FieldsObserver<T>
 
                 for (int i = 0; i < enumerable.Length; i++)
                 {
-                    var instance = Activator.CreateInstance(enumerable[0].GetType()) as IUpdateable;
+                    var instance = Activator.CreateInstance(enumerable[0].GetType()) as IUpdatable;
                     instance.Update(enumerable[i]);
-                    (LastValue as IUpdateable[])[i] = instance;
+                    (LastValue as IUpdatable[])[i] = instance;
                 }
             }
             else
