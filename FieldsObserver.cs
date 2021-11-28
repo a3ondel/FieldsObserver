@@ -33,7 +33,6 @@ public class FieldsObserver<T>
 {
     private class ObserverGroup
     {
-        public string GroupName { get; set; } = "default";
         public List<FieldInfo> Fields { get; set; } = new List<FieldInfo>();
 
         public List<Action> MethodsToInove { get; set; } = new List<Action>();
@@ -112,7 +111,7 @@ public class FieldsObserver<T>
             {
                 if (!_groups.ContainsKey(groupName))
                 {
-                    _groups[groupName] = new ObserverGroup() { GroupName = groupName };
+                    _groups[groupName] = new ObserverGroup();
                 }
 
                 _groups[groupName].Fields.Add(field);
@@ -129,7 +128,7 @@ public class FieldsObserver<T>
                 {
                     if (!_groups.ContainsKey(groupName))
                     {
-                        _groups[groupName] = new ObserverGroup() { GroupName = groupName };
+                        _groups[groupName] = new ObserverGroup();
                     }
 
                     _groups[groupName].MethodsToInove.Add(Delegate.CreateDelegate(typeof(Action), classToUpdate, method) as Action);
