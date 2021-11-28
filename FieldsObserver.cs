@@ -2,7 +2,15 @@ using System.Reflection;
 using System.Linq;
 using System.Collections.Generic;
 using System;
+using System.IO;
+using System.Runtime.Serialization.Formatters.Binary;
+using System.Runtime.Serialization;
 
+
+public interface IUpdateable
+{
+    public void Update(object obj);
+}
 public abstract class UpdaterAtribute : System.Attribute
 {
     public string[] GroupNames { get; set; }
@@ -16,38 +24,84 @@ public abstract class UpdaterAtribute : System.Attribute
         GroupNames = groupNames;
     }
 }
-
 public class ObserveField : UpdaterAtribute
 {
     public ObserveField(params string[] groupNames) : base(groupNames) { }
 }
-
 public class InvokeOnChange : UpdaterAtribute
 {
     public InvokeOnChange(params string[] groupNames) : base(groupNames) { }
 }
 
+public class UpdaterGroup
+{
+    public string GroupName { get; set; } = "default";
+    public List<FieldInfo> Fields { get; set; } = new List<FieldInfo>();
 
+    public List<Action> MethodsToInove { get; set; } = new List<Action>();
+
+    public bool Changed { get; set; } = false;
+
+    public bool ContainsField(FieldInfo field) => Fields.Contains(field);
+    public override string ToString()
+    {
+        return GroupName;
+    }
+}
 
 public class FieldsObserver<T>
 {
-    private class UpdaterGroup
+    private class HistoryObject
     {
-        public List<FieldInfo> Fields { get; } = new List<FieldInfo>();
+        public object actualValue { get; set; }
+        public object lastValue { get; set; }
 
-        public List<Action> MethodsToInove { get; } = new List<Action>();
+        public void Update(object actualValue)
+        {
+            lastValue = this.actualValue; //TODO it should be a copy
+            this.actualValue = actualValue;
+        }
 
-        public bool Changed { get; set; } = false;
 
-        public bool ContainsField(FieldInfo field) => Fields.Contains(field);
+        public HistoryObject(object value)
+        {
+            IUpdateable[] enumerable = value as IUpdateable[];
+
+            if (enumerable != null)
+            {
+                actualValue = Helper.Cast(value, value.GetType());
+                var tmp1 = new List<IUpdateable>(enumerable.Length);
+                var tmp2 = new List<IUpdateable>(enumerable.Length);
+                for (int i = 0; i < enumerable.Length; i++)
+                {
+                    tmp1.Add(new BaseClass());
+                    tmp2.Add(new BaseClass());
+                }
+
+                actualValue = tmp1.ToArray();
+                lastValue = tmp2.ToArray();
+
+                for (int i = 0; i < enumerable.Length; i++)
+                {
+                    var instance = Activator.CreateInstance(enumerable[0].GetType()) as IUpdateable;
+                    instance.Update(enumerable[i]);
+                    (lastValue as IUpdateable[])[i] = instance;
+                }
+            }
+            else
+            {
+                actualValue = value;
+                lastValue = value;
+            }
+            var res = actualValue == lastValue;
+        }
 
     }
 
     private readonly Dictionary<string, UpdaterGroup> _groups = new Dictionary<string, UpdaterGroup>() { };
-    private readonly Dictionary<string, object> _fieldsValueHistory = new Dictionary<string, object>();
+    private readonly Dictionary<string, HistoryObject> _fieldsValueHistory = new Dictionary<string, HistoryObject>();
     private readonly List<FieldInfo> _allfieldsToUpdate;
     private readonly object _classToUpdate;
-
     public FieldsObserver(object classToUpdate)
     {
         _classToUpdate = classToUpdate;
@@ -64,7 +118,7 @@ public class FieldsObserver<T>
             {
                 if (!_groups.ContainsKey(groupName))
                 {
-                    _groups[groupName] = new UpdaterGroup();
+                    _groups[groupName] = new UpdaterGroup() { GroupName = groupName };
                 }
 
                 _groups[groupName].Fields.Add(field);
@@ -81,7 +135,7 @@ public class FieldsObserver<T>
                 {
                     if (!_groups.ContainsKey(groupName))
                     {
-                        _groups[groupName] = new UpdaterGroup();
+                        _groups[groupName] = new UpdaterGroup() { GroupName = groupName };
                     }
                     _groups[groupName].MethodsToInove.Add(Delegate.CreateDelegate(typeof(Action), classToUpdate, method) as Action);
                 }
@@ -91,7 +145,7 @@ public class FieldsObserver<T>
         foreach (var field in _allfieldsToUpdate)
         {
             //Adding starting values to history
-            _fieldsValueHistory.Add(field.Name, field.GetValue(_classToUpdate));
+            _fieldsValueHistory.Add(field.Name, new HistoryObject(field.GetValue(_classToUpdate)));
         }
     }
 
@@ -100,15 +154,39 @@ public class FieldsObserver<T>
         foreach (var field in _allfieldsToUpdate)
         {
             _fieldsValueHistory.TryGetValue(field.Name, out var historyValue);
-            var actualFieldValue = field.GetValue(_classToUpdate);
-            if (!actualFieldValue.Equals(historyValue))
-            {
-                _fieldsValueHistory[field.Name] = actualFieldValue;
+            var actualFieldValue = field.GetValue(_classToUpdate);//always return new referance
 
-                foreach (var group in _groups)
+            var type = historyValue.lastValue.GetType();
+            var castedLastValue = Helper.Cast(historyValue.lastValue, type);
+            if (Helper.IsIEnumerableOfT(type))
+            {
+                bool changed = false;
+                for (int i = 0; i < castedLastValue.Length; i++)
                 {
-                    group.Value.Changed = group.Value.ContainsField(field);
+                    if (!castedLastValue[i].Equals((historyValue.actualValue as object[])[i]))
+                    {
+                        changed = true;
+                        break;
+                    }
                 }
+
+                if (changed)
+                {
+                    for (int i = 0; i < castedLastValue.Length; i++)
+                    {
+                        castedLastValue[i].Update((actualFieldValue as object[])[i]);
+                         
+                        historyValue.actualValue = actualFieldValue;
+                    }
+
+                    CheckIfGroupHasField(field);
+                }
+            }
+            else if (!castedLastValue.Equals(actualFieldValue))
+            {
+                _fieldsValueHistory[field.Name].Update(actualFieldValue);
+
+                CheckIfGroupHasField(field);
             }
         }
 
@@ -122,4 +200,28 @@ public class FieldsObserver<T>
             group.Value.Changed = false;
         }
     }
+
+    private void CheckIfGroupHasField(FieldInfo field)
+    {
+        foreach (var group in _groups)
+        {
+            group.Value.Changed = group.Value.ContainsField(field);
+        }
+    }
 }
+
+public static class Helper
+{
+    public static dynamic Cast(dynamic obj, Type castTo)
+    {
+        return Convert.ChangeType(obj, castTo);
+    }
+
+    public static bool IsIEnumerableOfT(this Type type)
+    {
+        return type.GetInterfaces().Any(x => x.IsGenericType
+               && x.GetGenericTypeDefinition() == typeof(IEnumerable<>));
+    }
+}
+
+
