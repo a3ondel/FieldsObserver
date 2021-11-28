@@ -1,12 +1,14 @@
 # FieldsObserver
  Simple Observer class, generally for Unity Scripts, but can be used anywhere.
  
+ Invokes marked methods when marked fields change values; (marked with included attributes)
+ 
  Allows to mark fields and void methods with no args with included Atributes:\
  -ObserveField(param string[] groupName)\
  -InvokeOnChange(param string[] groupName)
  
  
-If field is mareked with ObserveField atribute with no parameters field will be added to default group, same thing will happen with method.
+If field is marked with ObserveField atribute with no parameters field will be added to default group, same thing will happen with method.
  
 After marking fields and methods with inceluded atributes you need to initialize FiledsObserver class.
 Contructor takes 1 parameter and it's an object that contains fields that we want to observe.
