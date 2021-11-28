@@ -2,8 +2,6 @@ using UnityEngine;
 
 public class TileGenerator : MonoBehaviour
 {
-   
-
     [ObserveField] //by default default group is created and this field will be added to this group.
     public float def;
 
@@ -16,6 +14,9 @@ public class TileGenerator : MonoBehaviour
     [ObserveField("default","lol","cat")]
     public float testvar = 1;
 
+    [ObserveField("emptyGroup")]
+    public float emptyGroupValue; //changing this field wont invoke any method beacuse there is no method marked with emptyGroup.
+    
     private FieldUpdater<FieldsObserver> observer;
 
     //Methods need to be public
@@ -25,7 +26,7 @@ public class TileGenerator : MonoBehaviour
         Debug.Log("Default"); 
     }
     
-    [InvokeOnChange("cat")] //this method is going to be invoked if "cat" value will change
+    [InvokeOnChange("cat")] //this method is going to be invoked if "cat" or "testVar" value will change
     public void Meow()
     {
         Debug.Log("meow");
@@ -37,6 +38,9 @@ public class TileGenerator : MonoBehaviour
         Debug.Log("haha");
     }
     
+    [InvokeOnChange("no-fields-group")] 
+    public void Empty(); //this method wont be invoked because none of fields is marked to be in "no-fields-group" group
+    
     public void CheckForUpdates()
     {
         tileGeneratorUpdater.CheckForUpdates();
@@ -47,6 +51,5 @@ public class TileGenerator : MonoBehaviour
       observer = new<FieldsObserver>(this);
       InvokeRepeating(nameof(CheckForUpdates), 0.0f, 0.5f); //Checking for update after every 0.5 a second
     }
-
     
 }
