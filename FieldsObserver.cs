@@ -2,8 +2,7 @@ using System.Reflection;
 using System.Linq;
 using System.Collections.Generic;
 using System;
-using UnityEngine;
-using Force.DeepCloner;
+
 public interface IUpdateable
 {
     public void Update(object obj);
@@ -21,16 +20,16 @@ public abstract class ObserverAttribute : System.Attribute
         GroupNames = groupNames;
     }
 }
+
 public class ObserveField : ObserverAttribute
 {
     public ObserveField(params string[] groupNames) : base(groupNames) { }
 }
+
 public class InvokeOnChange : ObserverAttribute
 {
     public InvokeOnChange(params string[] groupNames) : base(groupNames) { }
 }
-
-
 
 public class FieldsObserver<T>
 {
@@ -44,15 +43,16 @@ public class FieldsObserver<T>
 
         public bool ContainsField(FieldInfo field) => Fields.Contains(field);
     }
-
+    
     private class HistoryObject
     {
         public object LastValue { get; set; }
 
         public void Update(object actualValue)
         {
-            LastValue = actualValue; // TODO shallow or deep copy
+            LastValue = actualValue.Copy(); // TODO shallow or deep copy
         }
+
         public HistoryObject(object value)
         {
             IUpdateable[] enumerable = value as IUpdateable[];
@@ -77,7 +77,7 @@ public class FieldsObserver<T>
             }
             else
             {
-                LastValue = value;
+                LastValue = value.Copy();
             }
         }
     }
@@ -86,6 +86,7 @@ public class FieldsObserver<T>
     private readonly Dictionary<string, HistoryObject> _fieldsValueHistory = new Dictionary<string, HistoryObject>();
     private readonly List<FieldInfo> _allfieldsToUpdate;
     private readonly object _classToUpdate;
+
     public FieldsObserver(object classToUpdate)
     {
         _classToUpdate = classToUpdate;
@@ -169,9 +170,6 @@ public class FieldsObserver<T>
                 historyValue.Update(actualFieldValue);
                 CheckIfGroupHasField(field);
 
-            }else if (type.Equals(typeof(AnimationCurve)))
-            {
-                historyValue.Update(new AnimationCurve { keys = (actualFieldValue as AnimationCurve).keys });
             }
         }
 
@@ -206,6 +204,57 @@ public static class Helper
     {
         return type.GetInterfaces().Any(x => x.IsGenericType
                && x.GetGenericTypeDefinition() == typeof(IEnumerable<>));
+    }
+
+    public static object Copy(this object obj)
+    {
+        Type type = obj.GetType();
+
+        if(type.IsPrimitive)
+        {
+            return obj;
+        }
+
+        if(IsIEnumerableOfT(type))
+        {
+            return obj;
+        }
+
+        //Looking for parameterless constructor if not do not copy
+        if (type.GetConstructor(Type.EmptyTypes) == null)
+        {
+            return obj;
+        }
+        
+
+        var newobj = Activator.CreateInstance(obj.GetType());
+        var properties = newobj.GetType().GetProperties();
+        var fields = newobj.GetType().GetFields(BindingFlags.Public);
+
+        foreach (var field in fields)
+        {
+            try
+            {
+                object value = field.GetValue(obj);
+                field.SetValue(newobj, value);
+            }
+            catch (Exception) { }
+        }
+
+        foreach (var prop in properties)
+        {
+            try
+            {
+                object value = prop.GetValue(obj);
+                if (prop.CanWrite)
+                {
+                    prop.SetValue(newobj, value);
+                }
+            }
+            catch (Exception) { }
+        }
+
+        return newobj;
     }
 
 }
