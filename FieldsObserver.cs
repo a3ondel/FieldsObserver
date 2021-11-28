@@ -30,7 +30,7 @@ public class InvokeOnChange : UpdaterAtribute
     public InvokeOnChange(params string[] groupNames) : base(groupNames) { }
 }
 
-public class UpdaterGroup
+public class ObserverGroup
 {
     public string GroupName { get; set; } = "default";
     public List<FieldInfo> Fields { get; set; } = new List<FieldInfo>();
@@ -59,16 +59,16 @@ public class FieldsObserver<T>
             this.actualValue = actualValue;
         }
 
-
         public HistoryObject(object value)
         {
-            IUpdateable[] enumerable = value as IUpdateable[];
+            var enumerable = value as IUpdateable[];
 
             if (enumerable != null)
             {
                 actualValue = Helper.Cast(value, value.GetType());
                 var tmp1 = new List<IUpdateable>(enumerable.Length);
                 var tmp2 = new List<IUpdateable>(enumerable.Length);
+
                 for (int i = 0; i < enumerable.Length; i++)
                 {
                     tmp1.Add(new BaseClass());
@@ -90,18 +90,17 @@ public class FieldsObserver<T>
                 actualValue = value;
                 lastValue = value;
             }
-            var res = actualValue == lastValue;
         }
     }
 
-    private readonly Dictionary<string, UpdaterGroup> _groups = new Dictionary<string, UpdaterGroup>() { };
+    private readonly Dictionary<string, ObserverGroup> _groups = new Dictionary<string, ObserverGroup>() { };
     private readonly Dictionary<string, HistoryObject> _fieldsValueHistory = new Dictionary<string, HistoryObject>();
     private readonly List<FieldInfo> _allfieldsToUpdate;
     private readonly object _classToUpdate;
     public FieldsObserver(object classToUpdate)
     {
         _classToUpdate = classToUpdate;
-        _groups.Add("default", new UpdaterGroup());
+        _groups.Add("default", new ObserverGroup());
 
         _allfieldsToUpdate = typeof(T).GetFields()
                                       .Where(field => field.GetCustomAttributes(typeof(ObserveField), false).Length > 0)
@@ -114,7 +113,7 @@ public class FieldsObserver<T>
             {
                 if (!_groups.ContainsKey(groupName))
                 {
-                    _groups[groupName] = new UpdaterGroup() { GroupName = groupName };
+                    _groups[groupName] = new ObserverGroup() { GroupName = groupName };
                 }
 
                 _groups[groupName].Fields.Add(field);
@@ -131,7 +130,7 @@ public class FieldsObserver<T>
                 {
                     if (!_groups.ContainsKey(groupName))
                     {
-                        _groups[groupName] = new UpdaterGroup() { GroupName = groupName };
+                        _groups[groupName] = new ObserverGroup() { GroupName = groupName };
                     }
 
                     _groups[groupName].MethodsToInove.Add(Delegate.CreateDelegate(typeof(Action), classToUpdate, method) as Action);
@@ -176,7 +175,12 @@ public class FieldsObserver<T>
             if (changed)
             {
                 _fieldsValueHistory[field.Name].Update(actualFieldValue);
-                CheckIfGroupHasField(field);
+
+                //looking for groups that have this field inside
+                foreach (var group in _groups)
+                {
+                    group.Value.Changed = group.Value.ContainsField(field);
+                }
             }
         }
 
@@ -188,14 +192,6 @@ public class FieldsObserver<T>
             }
 
             group.Value.Changed = false;
-        }
-    }
-
-    private void CheckIfGroupHasField(FieldInfo field)
-    {
-        foreach (var group in _groups)
-        {
-            group.Value.Changed = group.Value.ContainsField(field);
         }
     }
 }
